@@ -1,0 +1,217 @@
+name: fincore
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app-environment: &app-environment
+  DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in the root .env}
+  REDIS_URL: redis://redis:6379/0
+  DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-5}
+  DATABASE_MAX_OVERFLOW: ${DATABASE_MAX_OVERFLOW:-10}
+  DATABASE_POOL_TIMEOUT: ${DATABASE_POOL_TIMEOUT:-30}
+  REDIS_CONNECT_TIMEOUT: ${REDIS_CONNECT_TIMEOUT:-1}
+  REDIS_SOCKET_TIMEOUT: ${REDIS_SOCKET_TIMEOUT:-1}
+  REDIS_MAX_CONNECTIONS: ${REDIS_MAX_CONNECTIONS:-20}
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set a random JWT_SECRET_KEY in the root .env}
+  JWT_ALGORITHM: HS256
+  JWT_ACCESS_TOKEN_TTL_MINUTES: ${JWT_ACCESS_TOKEN_TTL_MINUTES:-30}
+  JWT_ISSUER: ${JWT_ISSUER:-fincore}
+  JWT_AUDIENCE: ${JWT_AUDIENCE:-fincore-api}
+  VERIFICATION_CONFIRMATION_TTL: ${VERIFICATION_CONFIRMATION_TTL:-PT1H}
+  PASSWORD_RESET_TTL: ${PASSWORD_RESET_TTL:-PT15M}
+  SESSION_TTL: ${SESSION_TTL:-P30D}
+  SANDBOX_ENABLED: ${SANDBOX_ENABLED:-false}
+  TRANSFER_MAX_AMOUNT_MINOR: ${TRANSFER_MAX_AMOUNT_MINOR:-9223372036854775807}
+  SANDBOX_MAX_AMOUNT_MINOR: ${SANDBOX_MAX_AMOUNT_MINOR:-9223372036854775807}
+  LOGIN_RATE_LIMIT_IP_PER_MINUTE: ${LOGIN_RATE_LIMIT_IP_PER_MINUTE:-30}
+  LOGIN_RATE_LIMIT_USERNAME_PER_MINUTE: ${LOGIN_RATE_LIMIT_USERNAME_PER_MINUTE:-10}
+  REGISTER_RATE_LIMIT_IP_PER_HOUR: ${REGISTER_RATE_LIMIT_IP_PER_HOUR:-10}
+  REGISTER_RATE_LIMIT_EMAIL_PER_HOUR: ${REGISTER_RATE_LIMIT_EMAIL_PER_HOUR:-3}
+  RESEND_CONFIRMATION_RATE_LIMIT_IP_PER_HOUR: ${RESEND_CONFIRMATION_RATE_LIMIT_IP_PER_HOUR:-20}
+  RESEND_CONFIRMATION_RATE_LIMIT_EMAIL_PER_HOUR: ${RESEND_CONFIRMATION_RATE_LIMIT_EMAIL_PER_HOUR:-3}
+  TRANSFER_RATE_LIMIT_USER_PER_MINUTE: ${TRANSFER_RATE_LIMIT_USER_PER_MINUTE:-30}
+  TRANSFER_RATE_LIMIT_IP_PER_MINUTE: ${TRANSFER_RATE_LIMIT_IP_PER_MINUTE:-100}
+  RECIPIENT_LOOKUP_RATE_LIMIT_USER_PER_MINUTE: ${RECIPIENT_LOOKUP_RATE_LIMIT_USER_PER_MINUTE:-30}
+  RECIPIENT_LOOKUP_RATE_LIMIT_IP_PER_MINUTE: ${RECIPIENT_LOOKUP_RATE_LIMIT_IP_PER_MINUTE:-100}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  HEALTH_CHECK_TIMEOUT: ${HEALTH_CHECK_TIMEOUT:-2}
+
+x-app: &app
+  image: ${FINCORE_IMAGE:-fincore-backend:local}
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging: *logging
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fincore}
+      POSTGRES_DB: ${POSTGRES_DB:-fincore}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the root .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    logging: *logging
+
+  redis:
+    image: redis:8-alpine
+    command: [redis-server, --appendonly, "yes", --maxmemory-policy, noeviction]
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    logging: *logging
+
+  migrate:
+    <<: *app
+    command: [alembic, upgrade, head]
+    environment: *app-environment
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    restart: unless-stopped
+    environment:
+      <<: *app-environment
+      API_WORKERS: ${API_WORKERS:-1}
+      FORWARDED_ALLOW_IPS: ${FRONTEND_INTERNAL_IP:-172.30.85.2}
+    networks:
+      default:
+      gateway:
+        ipv4_address: ${API_INTERNAL_IP:-172.30.85.3}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=float(os.environ['HEALTH_CHECK_TIMEOUT']) + 1).close()"]
+      interval: 15s
+      timeout: 12s
+      retries: 3
+      start_period: 15s
+    stop_grace_period: 50s
+
+  frontend:
+    image: ${FINCORE_FRONTEND_IMAGE:-fincore-frontend:local}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      BACKEND_API_URL: http://api:8000
+      PUBLIC_APP_ORIGIN: ${PUBLIC_APP_ORIGIN:?Set your HTTPS PUBLIC_APP_ORIGIN in the root .env}
+      FRONTEND_TRUSTED_PROXY_TOKEN: ${FRONTEND_TRUSTED_PROXY_TOKEN:?Set a separate random proxy token in the root .env}
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+    networks:
+      ingress:
+      gateway:
+        ipv4_address: ${FRONTEND_INTERNAL_IP:-172.30.85.2}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging: *logging
+
+  worker:
+    <<: *app
+    command: [python, -m, backend.bootstrap.outbox_worker]
+    restart: unless-stopped
+    environment:
+      <<: *app-environment
+      SMTP_BACKEND: ${SMTP_BACKEND:-ses}
+      SMTP_HOST: ${SMTP_HOST:-email-smtp.eu-central-1.amazonaws.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@example.com}
+      SMTP_TIMEOUT: ${SMTP_TIMEOUT:-10}
+      FRONTEND_CONFIRMATION_URL: ${FRONTEND_CONFIRMATION_URL:-https://example.com/confirm}
+      FRONTEND_PASSWORD_RESET_URL: ${FRONTEND_PASSWORD_RESET_URL:-https://example.com/reset-password}
+      EMAIL_LOCALE: ${EMAIL_LOCALE:-ru}
+      OUTBOX_CONCURRENCY: ${OUTBOX_CONCURRENCY:-4}
+      OUTBOX_POLL_INTERVAL: ${OUTBOX_POLL_INTERVAL:-1}
+      OUTBOX_LEASE_SECONDS: ${OUTBOX_LEASE_SECONDS:-60}
+      OUTBOX_SEND_TIMEOUT: ${OUTBOX_SEND_TIMEOUT:-30}
+      OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-5}
+      OUTBOX_RETRY_BASE: ${OUTBOX_RETRY_BASE:-5}
+      OUTBOX_RETRY_CAP: ${OUTBOX_RETRY_CAP:-300}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    stop_grace_period: 60s
+
+  maintenance:
+    <<: *app
+    command: [python, -m, backend.bootstrap.cleanup, --loop]
+    restart: unless-stopped
+    environment:
+      <<: *app-environment
+      CLEANUP_SESSION_RETENTION_DAYS: ${CLEANUP_SESSION_RETENTION_DAYS:-7}
+      CLEANUP_CHALLENGE_RETENTION_DAYS: ${CLEANUP_CHALLENGE_RETENTION_DAYS:-7}
+      CLEANUP_OUTBOX_RETENTION_DAYS: ${CLEANUP_OUTBOX_RETENTION_DAYS:-30}
+      CLEANUP_IDEMPOTENCY_RETENTION_DAYS: ${CLEANUP_IDEMPOTENCY_RETENTION_DAYS:-7}
+      CLEANUP_BATCH_SIZE: ${CLEANUP_BATCH_SIZE:-500}
+      CLEANUP_MAX_BATCHES: ${CLEANUP_MAX_BATCHES:-20}
+      CLEANUP_INTERVAL_SECONDS: ${CLEANUP_INTERVAL_SECONDS:-86400}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    stop_grace_period: 60s
+
+  mailpit:
+    image: axllent/mailpit:v1.27.4
+    profiles: [dev]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+    logging: *logging
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  ingress:
+  gateway:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${GATEWAY_SUBNET:-172.30.85.0/29}
