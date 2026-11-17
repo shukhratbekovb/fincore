@@ -36,6 +36,8 @@ coverage/
 # Покрытие Python: и файл с данными, и собранный из него отчёт.
 .coverage
 htmlcov/
+backend/reports/
+.ci-logs/
 
 # Playwright: следы прогонов и его собственный кеш браузеров.
 test-results/

@@ -1,0 +1,346 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Python ${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.13", "3.14"]
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      POETRY_VIRTUALENVS_IN_PROJECT: "true"
+      POETRY_NO_INTERACTION: "1"
+      DATABASE_URL: postgresql+asyncpg://fincore:ci-only-password@127.0.0.1:5432/fincore_test
+      FINCORE_TEST_DATABASE_URL: postgresql+asyncpg://fincore:ci-only-password@127.0.0.1:5432/fincore_test
+      REDIS_URL: redis://127.0.0.1:6379/0
+      FINCORE_TEST_REDIS_URL: redis://127.0.0.1:6379/0
+      FINCORE_TEST_SMTP_PORT: "1025"
+      FINCORE_TEST_MAILPIT_URL: http://127.0.0.1:8025
+      JWT_SECRET_KEY: ci-only-jwt-secret-at-least-32-bytes
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: fincore
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: fincore_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fincore -d fincore_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+      mailpit:
+        image: axllent/mailpit:v1.27.4
+        ports:
+          - 1025:1025
+          - 8025:8025
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Check CI report and readiness helpers
+        run: python -m unittest discover -s ../.github/tests -p 'test_*.py'
+      - name: Install locked dependencies
+        run: |
+          python -m pip install poetry==2.4.1
+          poetry check --lock
+          poetry install --with test --no-ansi
+      - name: Run all tests with the coverage gate
+        run: >-
+          poetry run pytest
+          --cov
+          --cov-fail-under=91
+          --cov-report=term-missing
+          --cov-report=xml:reports/coverage.xml
+          --cov-report=html:reports/htmlcov
+          --junitxml=reports/pytest.xml
+      - name: Require integration tests to run without skips
+        run: python ../.github/scripts/check_pytest_report.py reports/pytest.xml
+      - name: Upload test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: backend-reports-python-${{ matrix.python }}
+          path: backend/reports/
+          if-no-files-found: warn
+          retention-days: 14
+
+  frontend:
+    name: Frontend checks and production build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      BACKEND_API_URL: http://127.0.0.1:8000
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - name: Generate route types for a clean checkout
+        run: npx next typegen
+      - run: npm run typecheck
+      - name: Run unit tests with a machine-readable report
+        run: npm test -- --reporter=default --reporter=junit --outputFile=test-results/unit.xml
+      - name: Require frontend tests to run without skips
+        run: python3 ../.github/scripts/check_pytest_report.py test-results/unit.xml
+      - run: npm run build
+      - name: Upload frontend unit report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: frontend-unit-report
+          path: frontend/test-results/unit.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  e2e:
+    name: Browser end-to-end flows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      POETRY_VIRTUALENVS_IN_PROJECT: "true"
+      POETRY_NO_INTERACTION: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+      DATABASE_URL: postgresql+asyncpg://fincore:ci-only-password@127.0.0.1:5432/fincore_e2e_test
+      REDIS_URL: redis://127.0.0.1:6379/0
+      JWT_SECRET_KEY: ci-only-e2e-jwt-secret-at-least-32-bytes
+      BACKEND_API_URL: http://127.0.0.1:8000
+      SANDBOX_ENABLED: "true"
+      SMTP_BACKEND: local
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: "1025"
+      SMTP_SECURITY: none
+      SMTP_FROM_EMAIL: no-reply@example.com
+      FRONTEND_CONFIRMATION_URL: http://localhost:3000/confirm
+      FRONTEND_PASSWORD_RESET_URL: http://localhost:3000/reset-password
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: fincore
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: fincore_e2e_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fincore -d fincore_e2e_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+      mailpit:
+        image: axllent/mailpit:v1.27.4
+        ports:
+          - 1025:1025
+          - 8025:8025
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Validate workflow syntax and expressions
+        run: |
+          curl --fail --location --silent --show-error https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz --output "$RUNNER_TEMP/actionlint.tar.gz"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -shellcheck= .github/workflows/ci.yml
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install application dependencies and Chromium
+        run: |
+          python -m pip install poetry==2.4.1
+          poetry check --lock --directory backend
+          poetry install --only main --no-ansi --directory backend
+          npm ci --prefix frontend
+          cd frontend
+          npx playwright install --with-deps chromium
+      - name: Migrate the isolated E2E database
+        working-directory: backend
+        run: poetry run alembic upgrade head
+      - name: Start API, delivery worker and development frontend
+        run: |
+          mkdir -p .ci-logs
+          (
+            cd backend
+            poetry run uvicorn backend.main:app --app-dir src --host 127.0.0.1 --port 8000 --no-proxy-headers > ../.ci-logs/api.log 2>&1 &
+            echo $! > ../.ci-logs/api.pid
+            PYTHONPATH=src poetry run python -u -m backend.bootstrap.outbox_worker > ../.ci-logs/worker.log 2>&1 &
+            echo $! > ../.ci-logs/worker.pid
+          )
+          (
+            cd frontend
+            npm run dev -- --hostname 127.0.0.1 --port 3000 > ../.ci-logs/frontend.log 2>&1 &
+            echo $! > ../.ci-logs/frontend.pid
+          )
+          python .github/scripts/wait_for_http.py http://127.0.0.1:8000/health/ready
+          python .github/scripts/wait_for_http.py http://127.0.0.1:8025/api/v1/messages
+          python .github/scripts/wait_for_http.py http://localhost:3000/health
+      - name: Run real browser journeys
+        working-directory: frontend
+        run: npm run test:e2e
+      - name: Require browser tests to run without skips
+        run: python .github/scripts/check_pytest_report.py frontend/test-results/e2e.xml
+      - name: Stop application processes
+        if: always()
+        run: |
+          for service in frontend worker api; do
+            if [ -f ".ci-logs/$service.pid" ]; then
+              kill -TERM "$(cat ".ci-logs/$service.pid")" || true
+            fi
+          done
+      - name: Upload browser reports and process logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: browser-reports
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+            .ci-logs/*.log
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+
+  containers:
+    name: Container builds and Compose configuration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: postgresql+asyncpg://fincore:ci-only-password@postgres:5432/fincore_ci_test
+      POSTGRES_DB: fincore_ci_test
+      POSTGRES_PASSWORD: ci-only-password
+      FINCORE_POSTGRES_PASSWORD: ci-only-password
+      JWT_SECRET_KEY: ci-only-jwt-secret-at-least-32-bytes
+      PUBLIC_APP_ORIGIN: https://fincore.example
+      FRONTEND_TRUSTED_PROXY_TOKEN: ci-only-proxy-secret-at-least-32-bytes
+      CI_STACK_PROJECT: fincore-ci-stack
+      FRONTEND_PORT: "13000"
+      MAILPIT_UI_PORT: "18027"
+      FINCORE_IMAGE: fincore-backend:ci
+      FINCORE_FRONTEND_IMAGE: fincore-frontend:ci
+      SMTP_BACKEND: local
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_SECURITY: none
+      SMTP_FROM_EMAIL: no-reply@example.com
+      FRONTEND_CONFIRMATION_URL: https://fincore.example/confirm
+      FRONTEND_PASSWORD_RESET_URL: https://fincore.example/reset-password
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Validate production and development Compose
+        run: |
+          docker compose --env-file /dev/null -f compose.yml config --quiet
+          docker compose --env-file /dev/null -f compose.dev.yml config --quiet
+      - name: Build production images
+        run: |
+          docker build --tag fincore-backend:ci backend
+          docker build --tag fincore-frontend:ci frontend
+      - name: Check packaged backend imports and resources
+        run: >-
+          docker run --rm --network none
+          --env DATABASE_URL --env JWT_SECRET_KEY
+          fincore-backend:ci python -c
+          "from pathlib import Path; from backend.main import app;
+          assert app; assert Path('migrations').is_dir();
+          assert list(Path('src/backend/infrastructure/notifications/templates').rglob('*.html'))"
+      - name: Start the complete isolated production stack
+        run: >-
+          docker compose --env-file /dev/null -p "$CI_STACK_PROJECT" --profile dev
+          up --no-build --detach --wait --wait-timeout 120
+      - name: Verify production ingress, auth delivery and persistence
+        run: python .github/scripts/check_compose_stack.py
+      - name: Container logs and cleanup
+        if: always()
+        run: |
+          mkdir -p .ci-logs
+          docker compose --env-file /dev/null -p "$CI_STACK_PROJECT" --profile dev logs --no-color > .ci-logs/compose.log 2>&1 || true
+          docker compose --env-file /dev/null -p "$CI_STACK_PROJECT" --profile dev down --volumes --remove-orphans
+      - name: Upload container logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: container-logs
+          path: .ci-logs/compose.log
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+
+  checks:
+    name: CI required checks
+    if: always()
+    needs: [backend, frontend, e2e, containers]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    env:
+      RESULTS: ${{ join(needs.*.result, ',') }}
+    steps:
+      - name: Require every job to succeed
+        run: |
+          python3 - <<'PY'
+          import os, sys
+          results = os.environ['RESULTS'].split(',')
+          if not results or any(result != 'success' for result in results):
+              print('One or more required jobs failed, were cancelled or skipped.', file=sys.stderr)
+              raise SystemExit(1)
+          print('All required CI jobs passed.')
+          PY
