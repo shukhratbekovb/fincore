@@ -1,0 +1,59 @@
+# Password reset: application contract
+
+`RequestPasswordResetUseCase.execute(RequestPasswordResetCommand)` returns None
+for both unknown and eligible accounts. Only active accounts with an existing
+password receive a PASSWORD_RESET challenge and SendPasswordResetConfirmation
+message. User credentials, sessions and previous links remain unchanged until
+a valid reset is confirmed. Token generation/hashing also runs for unknown
+accounts; this does not guarantee uniform HTTP response timing.
+
+`ConfirmPasswordResetUseCase.execute(ConfirmPasswordResetCommand)` returns
+ConfirmPasswordResetResult.password once after commit and successful UoW exit.
+The input contains only the reset token. The generated RawPassword is hashed
+with IPasswordHasher; only the hash is saved on User. The transaction consumes
+the challenge, revokes sessions, invalidates all remaining unused PASSWORD_RESET
+challenges for the user and adds SendPasswordChangedNotification without a password.
+Missing, expired, consumed, wrong-purpose or ineligible resets raise the same
+InvalidPasswordResetTokenError. Infrastructure failures propagate normally.
+
+Reset reads challenge identity without a lock, locks the user, then re-reads
+the challenge FOR UPDATE. All reset creation/confirmation paths serialize on
+the user lock. Registration confirmation rejects reset-purpose challenges
+before acquiring the user lock, avoiding an inverted lock order. Repository
+adapters must keep challenge user_id/purpose/token_hash immutable and return
+fresh state on locked reads.
+
+Infrastructure and presentation are connected:
+
+- SQLAlchemy challenge reads and invalidation use the UoW transaction.
+- Both new outbox messages have explicit versioned serializers, handlers and
+  RU/EN text/HTML templates. Local SMTP and production SES use the same worker.
+- PASSWORD_RESET_TTL defaults to PT15M; FRONTEND_PASSWORD_RESET_URL determines
+  the trusted frontend link target. Production SES requires both frontend URLs
+  to use HTTPS, without embedded credentials, queries or fragments.
+- POST /v1/auth/password-reset/request accepts email and returns generic 202.
+- POST /v1/auth/password-reset/confirm accepts only token and returns password
+  once after commit. Extra fields are rejected; invalid tokens map to 400.
+- Auth responses use Cache-Control: no-store. Never log request/result/token
+  bodies. Repeated confirm is not idempotent: a lost response requires a new
+  reset; plaintext cannot be recovered from a hash.
+- Redis atomic rate limits are shared across API workers: request IP
+  10/minute, email 3/15 minutes (including unknown emails), confirmation IP
+  20/minute. 429 includes Retry-After; Redis outages return safe 503 before the
+  use case. An atomic Lua script updates counters and TTL; Redis expires buckets.
+  Redis keys store SHA-256 identifier digests, not raw
+  email/IP; these digests are pseudonymous, not anonymous.
+- Presentation dependencies also limit login (30/minute per IP and 10/minute per
+  normalized username) and registration (10/hour per IP and 3/hour per normalized
+  email). These defaults are configurable in Settings/.env. All admitted attempts,
+  including successful logins, invalid credentials and registration conflicts, count.
+  Known and unknown identifiers use the same rules. Limits remain outside auth handlers.
+- A successful request waits until 500–600 ms after the use case began. This
+  reduces the fast unknown-account path but does not guarantee uniform timing
+  under load. Proxy/body/logging policy must still be configured at deployment.
+- The frontend reads/removes the URL fragment and confirms only on explicit
+  user action. It must use HTTPS, exclude analytics/third-party scripts on the
+  reset page, show the generated password once and avoid persistent storage.
+
+Session revocation prevents refresh. Immediate rejection of previously issued
+access JWTs additionally requires session-bound access-token authentication.
