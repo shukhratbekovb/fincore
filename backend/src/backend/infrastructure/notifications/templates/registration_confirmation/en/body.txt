@@ -1,0 +1,5 @@
+Confirm your FinCore registration and choose a password:
+{{ confirmation_url }}
+
+This link expires at {{ expires_at }}.
+If you did not register, you can ignore this email.

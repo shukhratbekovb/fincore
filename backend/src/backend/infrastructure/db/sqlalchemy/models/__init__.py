@@ -1,0 +1,17 @@
+from backend.infrastructure.db.sqlalchemy.models.base import SqlAlchemyBaseModel
+from backend.infrastructure.db.sqlalchemy.models.user import SqlAlchemyUserModel
+from backend.infrastructure.db.sqlalchemy.models.wallet import SqlAlchemyWalletModel
+from backend.infrastructure.db.sqlalchemy.models.session import SqlAlchemySessionModel, SqlAlchemyRefreshTokenModel
+from backend.infrastructure.db.sqlalchemy.models.verification import SqlAlchemyVerificationChallengeModel
+from backend.infrastructure.db.sqlalchemy.models.wallet_balance import SqlAlchemyWalletBalanceModel
+from backend.infrastructure.db.sqlalchemy.models.ledger_account import SqlAlchemyLedgerAccountModel
+from backend.infrastructure.db.sqlalchemy.models.outbox import SqlAlchemyOutboxModel
+from backend.infrastructure.db.sqlalchemy.models.transfer import SqlAlchemyTransferModel
+from backend.infrastructure.db.sqlalchemy.models.sandbox_top_up import SqlAlchemySandboxTopUpModel
+from backend.infrastructure.db.sqlalchemy.models.ledger_transaction import SqlAlchemyLedgerTransactionModel
+from backend.infrastructure.db.sqlalchemy.models.ledger_entry import SqlAlchemyLedgerEntryModel
+from backend.infrastructure.db.sqlalchemy.models.idempotency import SqlAlchemyIdempotencyModel, SqlAlchemyIdempotencyReceiptModel
+from backend.infrastructure.db.sqlalchemy.models.sandbox_operator import SqlAlchemySandboxOperatorModel
+from backend.infrastructure.db.sqlalchemy.ledger_guards import register_ledger_guards
+
+register_ledger_guards(SqlAlchemyBaseModel.metadata)
