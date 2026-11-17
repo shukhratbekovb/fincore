@@ -1,0 +1,1129 @@
+{
+  "request_body": "JSON request body. All values in examples are fictional; replace token placeholders with real issued tokens.",
+  "tags": [
+    {
+      "name": "auth",
+      "x-displayName": "Authentication",
+      "description": "Registration, confirmation, sessions and password reset. change-password requires a Bearer access JWT."
+    },
+    {
+      "name": "health",
+      "x-displayName": "Service status",
+      "description": "Application liveness. Database readiness is not checked."
+    },
+    {
+      "name": "users",
+      "x-displayName": "User and sessions",
+      "description": "Profile and management of your own sessions. All operations require a Bearer access JWT."
+    },
+    {
+      "name": "wallet",
+      "x-displayName": "Wallets",
+      "description": "Create, read, rename and close your own wallets. Requires an active user and a Bearer access JWT."
+    },
+    {
+      "name": "transfers",
+      "description": "Transfers"
+    },
+    {
+      "name": "sandbox",
+      "description": "Operator-only virtual funding"
+    }
+  ],
+  "operations": {
+    "health": {
+      "summary": "Check application liveness",
+      "responses": {
+        "200": "The application can handle HTTP requests."
+      }
+    },
+    "register": {
+      "summary": "Register a user",
+      "responses": {
+        "201": "A pending user and a confirmation delivery task have been created.",
+        "409": "The email or username is already registered.",
+        "422": "Invalid request fields.",
+        "400": "Client IP unavailable.",
+        "429": "Request limit exceeded. Retry-After specifies seconds before retrying.",
+        "503": "The request limit service is unavailable; the operation is not performed."
+      }
+    },
+    "confirm": {
+      "summary": "Confirm registration and set a password",
+      "responses": {
+        "204": "The account is active and its password has been set. No response body.",
+        "400": "The confirmation token is invalid, expired, already used or has a different purpose.",
+        "404": "The user associated with the confirmation no longer exists.",
+        "409": "The user is not awaiting confirmation.",
+        "422": "Invalid request fields or the new password does not meet the creation policy."
+      }
+    },
+    "login": {
+      "summary": "Sign in and create a session",
+      "responses": {
+        "200": "An access token and a refresh token for a new session.",
+        "400": "Client IP unavailable.",
+        "401": "Invalid username or password, including users without a confirmed password.",
+        "403": "The password is correct but the account is inactive.",
+        "422": "Invalid request fields.",
+        "429": "Request limit exceeded. Retry-After specifies seconds before retrying.",
+        "503": "The request limit service is unavailable; the operation is not performed."
+      }
+    },
+    "refresh": {
+      "summary": "Rotate a refresh token",
+      "responses": {
+        "200": "A new access token and a replacement refresh token for the same session.",
+        "400": "The server cannot determine the client IP address.",
+        "401": "The token or session is invalid, expired or revoked. Reuse also revokes the session.",
+        "403": "The account is inactive.",
+        "422": "Invalid request fields."
+      }
+    },
+    "logout": {
+      "summary": "Revoke a session",
+      "responses": {
+        "204": "The session has been revoked, or there is no session to revoke. No response body.",
+        "422": "Invalid request fields."
+      }
+    },
+    "change_password": {
+      "summary": "Change password",
+      "responses": {
+        "204": "Password changed and sessions revoked. No response body.",
+        "401": "Incorrect current password or missing, invalid or expired access JWT.",
+        "403": "The account is inactive.",
+        "422": "Invalid request fields."
+      }
+    },
+    "request_password_reset": {
+      "summary": "Request a password reset",
+      "responses": {
+        "202": "Request accepted. The response is identical for all valid email addresses.",
+        "400": "Client IP unavailable.",
+        "422": "Invalid request fields.",
+        "429": "Rate limit exceeded. Retry after the number of seconds specified by Retry-After.",
+        "503": "The request limit service is temporarily unavailable. The operation is not performed."
+      }
+    },
+    "confirm_password_reset": {
+      "summary": "Confirm reset and receive a new password",
+      "responses": {
+        "200": "Generated password. Save it: it is shown once.",
+        "400": "Invalid reset token or unavailable client IP.",
+        "422": "Invalid request fields.",
+        "429": "Rate limit exceeded. Retry after the number of seconds specified by Retry-After.",
+        "503": "The request limit service is temporarily unavailable. The operation is not performed."
+      }
+    },
+    "get_current_user": {
+      "summary": "Get your profile",
+      "responses": {
+        "200": "Public fields of the current user.",
+        "401": "Access JWT is missing, invalid or expired.",
+        "403": "The user is inactive.",
+        "404": "The user identified by the JWT was not found."
+      }
+    },
+    "get_active_sessions": {
+      "summary": "List your active sessions",
+      "responses": {
+        "200": "Active sessions, including an empty list.",
+        "401": "Access JWT is missing, invalid or expired.",
+        "403": "The user is inactive.",
+        "404": "The user identified by the JWT was not found."
+      }
+    },
+    "remove_all_sessions": {
+      "summary": "Revoke all your sessions",
+      "responses": {
+        "204": "All sessions revoked. No response body.",
+        "401": "Access JWT is missing, invalid or expired.",
+        "403": "The user is inactive.",
+        "404": "The user identified by the JWT was not found."
+      }
+    },
+    "remove_session": {
+      "summary": "Revoke one of your sessions",
+      "responses": {
+        "204": "The session is revoked or was already revoked. No response body.",
+        "401": "Access JWT is missing, invalid or expired.",
+        "403": "The user is inactive.",
+        "404": "The user was not found, or the session is absent or belongs to another user.",
+        "422": "session_id must be a UUID."
+      }
+    },
+    "create_wallet": {
+      "summary": "Create a wallet",
+      "responses": {
+        "201": "Wallet, zero balance and ledger account created in one transaction.",
+        "401": "Access JWT is missing, invalid or expired.",
+        "403": "The user is inactive.",
+        "404": "The user identified by the JWT does not exist.",
+        "422": "Invalid request body, wallet name or UUID.",
+        "503": "Could not allocate a unique number after bounded retries."
+      }
+    },
+    "rename_wallet": {
+      "summary": "Rename a wallet",
+      "parameters": {
+        "wallet_id": "UUID of your own wallet. Foreign and absent UUIDs return the same error."
+      },
+      "responses": {
+        "204": "Name updated. No response body.",
+        "401": "Access JWT is missing, invalid or expired.",
+        "403": "The user is inactive.",
+        "404": "The user is absent, or the wallet is absent or belongs to another user.",
+        "422": "Invalid request body, wallet name or UUID.",
+        "409": "A closed wallet cannot be renamed."
+      }
+    },
+    "close_wallet": {
+      "summary": "Close a wallet",
+      "parameters": {
+        "wallet_id": "UUID of your own wallet. Foreign and absent UUIDs return the same error."
+      },
+      "responses": {
+        "204": "Wallet and its ledger account closed. No response body.",
+        "401": "Access JWT is missing, invalid or expired.",
+        "403": "The user is inactive.",
+        "404": "The user is absent, or the wallet is absent or belongs to another user.",
+        "422": "Invalid request body, wallet name or UUID.",
+        "409": "Wallet balance is not zero.",
+        "500": "Wallet accounting state is missing or inconsistent. Changes are not committed."
+      }
+    },
+    "get_wallet": {
+      "summary": "Get your wallet",
+      "parameters": {
+        "wallet_id": "UUID of your own wallet. Foreign and absent wallets return the same 404."
+      },
+      "responses": {
+        "200": "Wallet with balance in currency minor units.",
+        "401": "Access JWT is missing, invalid or expired.",
+        "403": "The user is inactive.",
+        "404": "The user is absent, or the wallet is absent or belongs to another user.",
+        "422": "Invalid request parameters.",
+        "500": "A balance record is missing or accounting state is invalid."
+      }
+    },
+    "get_my_wallets": {
+      "summary": "List your wallets",
+      "parameters": {
+        "currency": "Optional currency code filter.",
+        "status": "Optional status: active, frozen or closed. Omit to include all statuses.",
+        "sort_by": "Sort field and direction. Defaults to created_at:asc; ties are ordered by id ASC."
+      },
+      "responses": {
+        "200": "Array of your own wallets with balances, including an empty array.",
+        "401": "Access JWT is missing, invalid or expired.",
+        "403": "The user is inactive.",
+        "404": "The user identified by the JWT does not exist.",
+        "422": "Invalid request parameters.",
+        "500": "A balance record is missing or accounting state is invalid."
+      }
+    },
+    "create_transfer": {
+      "summary": "Create a transfer",
+      "responses": {
+        "201": "Successful result",
+        "401": "Error: see documented codes",
+        "403": "Error: see documented codes",
+        "404": "Error: see documented codes",
+        "409": "Error: see documented codes",
+        "422": "Error: see documented codes",
+        "500": "Error: see documented codes",
+        "400": "Client IP unavailable.",
+        "429": "Request limit exceeded. Retry-After specifies seconds before retrying.",
+        "503": "The request limit service is unavailable; the operation is not performed."
+      },
+      "parameters": {
+        "Idempotency-Key": "Parameter Idempotency-Key. Applied within the authenticated user scope."
+      }
+    },
+    "get_transfer": {
+      "summary": "Get a transfer",
+      "responses": {
+        "200": "Successful result",
+        "401": "Error: see documented codes",
+        "403": "Error: see documented codes",
+        "404": "Error: see documented codes",
+        "422": "Error: see documented codes"
+      },
+      "parameters": {
+        "transfer_id": "Parameter transfer_id. Applied within the authenticated user scope."
+      }
+    },
+    "get_my_transfers": {
+      "summary": "List my transfers",
+      "responses": {
+        "200": "Successful result",
+        "401": "Error: see documented codes",
+        "403": "Error: see documented codes",
+        "404": "Error: see documented codes",
+        "422": "Error: see documented codes"
+      },
+      "parameters": {
+        "limit": "Parameter limit. Page size 1–100; default 20.",
+        "cursor": "Parameter cursor. Applied within the authenticated user scope.",
+        "wallet_id": "Parameter wallet_id. Applied within the authenticated user scope.",
+        "currency": "Parameter currency. Applied within the authenticated user scope.",
+        "status": "Parameter status. Applied within the authenticated user scope.",
+        "direction": "Parameter direction. Applied within the authenticated user scope.",
+        "created_from": "Parameter created_from. Applied within the authenticated user scope.",
+        "created_to": "Parameter created_to. Applied within the authenticated user scope."
+      }
+    },
+    "create_sandbox_top_up": {
+      "summary": "Create a sandbox top-up",
+      "responses": {
+        "201": "Successful result",
+        "401": "Error: see documented codes",
+        "403": "Error: see documented codes",
+        "404": "Error: see documented codes",
+        "409": "Error: see documented codes",
+        "422": "Error: see documented codes",
+        "500": "Error: see documented codes"
+      },
+      "parameters": {
+        "Idempotency-Key": "Parameter Idempotency-Key. Applied within the authenticated user scope."
+      }
+    },
+    "get_wallet_transactions": {
+      "summary": "Wallet transaction history",
+      "responses": {
+        "200": "Successful result",
+        "401": "Error: see documented codes",
+        "403": "Error: see documented codes",
+        "404": "Error: see documented codes",
+        "422": "Error: see documented codes"
+      },
+      "parameters": {
+        "wallet_id": "Parameter wallet_id. Applied within the authenticated user scope.",
+        "limit": "Parameter limit. Page size 1–100; default 20.",
+        "cursor": "Parameter cursor. Applied within the authenticated user scope.",
+        "kind": "Parameter kind. Applied within the authenticated user scope.",
+        "currency": "Parameter currency. Applied within the authenticated user scope.",
+        "direction": "Parameter direction. Applied within the authenticated user scope.",
+        "posted_from": "Parameter posted_from. Applied within the authenticated user scope.",
+        "posted_to": "Parameter posted_to. Applied within the authenticated user scope."
+      }
+    },
+    "get_my_transactions": {
+      "summary": "Combined transaction history",
+      "responses": {
+        "200": "Successful result",
+        "401": "Error: see documented codes",
+        "403": "Error: see documented codes",
+        "404": "Error: see documented codes",
+        "422": "Error: see documented codes"
+      },
+      "parameters": {
+        "limit": "Parameter limit. Page size 1–100; default 20.",
+        "cursor": "Parameter cursor. Applied within the authenticated user scope.",
+        "wallet_id": "Parameter wallet_id. Applied within the authenticated user scope.",
+        "kind": "Parameter kind. Applied within the authenticated user scope.",
+        "currency": "Parameter currency. Applied within the authenticated user scope.",
+        "direction": "Parameter direction. Applied within the authenticated user scope.",
+        "posted_from": "Parameter posted_from. Applied within the authenticated user scope.",
+        "posted_to": "Parameter posted_to. Applied within the authenticated user scope."
+      }
+    },
+    "get_wallet_balance": {
+      "summary": "Wallet balance",
+      "responses": {
+        "200": "Successful result",
+        "401": "Error: see documented codes",
+        "403": "Error: see documented codes",
+        "404": "Error: see documented codes",
+        "422": "Error: see documented codes",
+        "500": "Error: see documented codes"
+      },
+      "parameters": {
+        "wallet_id": "Parameter wallet_id. Applied within the authenticated user scope."
+      }
+    },
+    "get_my_balance_summary": {
+      "summary": "Balance summary by currency",
+      "responses": {
+        "200": "Successful result",
+        "401": "Error: see documented codes",
+        "403": "Error: see documented codes",
+        "404": "Error: see documented codes",
+        "422": "Error: see documented codes",
+        "500": "Error: see documented codes"
+      },
+      "parameters": {
+        "currency": "Parameter currency. Applied within the authenticated user scope."
+      }
+    },
+    "freeze_wallet": {
+      "summary": "Freeze wallet",
+      "parameters": {
+        "wallet_id": "UUID of your own wallet. Foreign and absent UUIDs return the same error."
+      },
+      "responses": {
+        "204": "Wallet and its ledger account closed. No response body.",
+        "401": "Access JWT is missing, invalid or expired.",
+        "403": "The user is inactive.",
+        "404": "The user is absent, or the wallet is absent or belongs to another user.",
+        "422": "Invalid request body, wallet name or UUID.",
+        "409": "A closed wallet cannot be changed.",
+        "500": "Wallet accounting state is inconsistent."
+      }
+    },
+    "unfreeze_wallet": {
+      "summary": "Unfreeze wallet",
+      "parameters": {
+        "wallet_id": "UUID of your own wallet. Foreign and absent UUIDs return the same error."
+      },
+      "responses": {
+        "204": "Wallet and its ledger account closed. No response body.",
+        "401": "Access JWT is missing, invalid or expired.",
+        "403": "The user is inactive.",
+        "404": "The user is absent, or the wallet is absent or belongs to another user.",
+        "422": "Invalid request body, wallet name or UUID.",
+        "409": "A closed wallet cannot be changed.",
+        "500": "Wallet accounting state is inconsistent."
+      }
+    },
+    "health_live": {
+      "summary": "Check process liveness",
+      "responses": {
+        "200": "The process can serve HTTP requests."
+      }
+    },
+    "health_ready": {
+      "summary": "Check API readiness",
+      "responses": {
+        "200": "PostgreSQL and Redis are available.",
+        "503": "One or more dependencies are unavailable or timed out."
+      }
+    },
+    "resolve_wallet_recipient": {
+      "summary": "Resolve a recipient by wallet number",
+      "responses": {
+        "200": "Recipient found",
+        "400": "Client IP unavailable",
+        "401": "Valid access token required",
+        "403": "User is inactive",
+        "404": "Wallet not found or unavailable",
+        "422": "A 20-digit ASCII wallet number is required",
+        "429": "Too many requests",
+        "503": "Rate limit service unavailable"
+      }
+    },
+    "resend_confirmation": {
+      "summary": "Resend registration confirmation",
+      "responses": {
+        "202": "Generic acknowledgement, regardless of account existence or eligibility.",
+        "400": "Client IP unavailable.",
+        "422": "Invalid email or extra request fields.",
+        "429": "Request limit exceeded; Retry-After specifies seconds.",
+        "503": "Rate limiter unavailable; the operation is not performed."
+      }
+    }
+  },
+  "schemas": {
+    "LoginUserSchema": {
+      "title": "Sign-in request",
+      "description": "Credentials for an existing account. New-password complexity rules are not applied during sign-in.",
+      "fields": {
+        "username": {
+          "title": "Username",
+          "description": "5–256 characters. Starts with a Latin letter; ends with a Latin letter or digit. Latin letters, digits and underscores are allowed. Normalized to lowercase."
+        },
+        "password": {
+          "title": "Password",
+          "description": "Existing password, 1–256 characters. Passed unchanged to hash verification, including spaces; case is significant."
+        }
+      }
+    },
+    "RegisterUserSchema": {
+      "title": "Registration request",
+      "description": "Creates an account awaiting confirmation. The password is chosen in the confirmation request.",
+      "fields": {
+        "username": {
+          "title": "Username",
+          "description": "Unique username, 5–256 characters. Starts with a Latin letter, ends with a Latin letter or digit; only Latin letters, digits and underscores. Normalized to lowercase."
+        },
+        "email": {
+          "title": "Email address",
+          "description": "A valid unique email address. Stored in lowercase. The email validator also applies email-specific length limits."
+        }
+      }
+    },
+    "RegisterUserResponse": {
+      "title": "Registration result",
+      "description": "Identifier of the newly created user. Registration alone does not activate the account.",
+      "fields": {
+        "user_id": {
+          "title": "User ID",
+          "description": "User UUID. This identifier is not a confirmation token."
+        }
+      }
+    },
+    "ConfirmUserSchema": {
+      "title": "Registration confirmation request",
+      "description": "A one-time registration token and the password to set for the account.",
+      "fields": {
+        "token": {
+          "title": "Confirmation token",
+          "description": "Opaque registration token, 1–512 characters without whitespace. Use the token from the confirmation flow, not the user UUID or an access token."
+        },
+        "password": {
+          "title": "New password",
+          "description": "8–256 characters, with a lowercase letter, an uppercase letter, a digit and an ASCII punctuation character. The password is not trimmed."
+        }
+      }
+    },
+    "RefreshSessionSchema": {
+      "title": "Session refresh request",
+      "description": "Exchanges the current refresh token for a replacement and a new access token.",
+      "fields": {
+        "refresh_token": {
+          "title": "Refresh token",
+          "description": "The latest opaque refresh token issued for this session. 1–512 characters without whitespace. Single use for refresh."
+        }
+      }
+    },
+    "LogoutUserSchema": {
+      "title": "Sign-out request",
+      "description": "Identifies the session to revoke. Repeated requests are safe.",
+      "fields": {
+        "refresh_token": {
+          "title": "Refresh token",
+          "description": "A refresh token belonging to the session, including a previously rotated token. 1–512 characters without whitespace."
+        }
+      }
+    },
+    "TokenResponse": {
+      "title": "Token pair",
+      "description": "Tokens are returned in JSON. This implementation does not set authentication cookies. Example token strings are placeholders, not usable credentials.",
+      "fields": {
+        "access_token": {
+          "title": "Access token",
+          "description": "Signed JWT with a limited lifetime. Do not use it as a refresh or confirmation token."
+        },
+        "refresh_token": {
+          "title": "Refresh token",
+          "description": "Opaque secret bound to a session. After a successful refresh, replace the previous value with this token."
+        }
+      }
+    },
+    "ErrorResponse": {
+      "title": "Expected API error",
+      "description": "JSON envelope for expected HTTP, validation and business errors. Unexpected server failures remain HTTP 500 and do not use this schema.",
+      "fields": {
+        "detail": {
+          "title": "Error details",
+          "description": "A stable code, a human-readable message and optional validation issues."
+        }
+      }
+    },
+    "ErrorDetail": {
+      "title": "Error details",
+      "description": "Use code for programmatic handling. Changing documentation language does not translate actual API messages.",
+      "fields": {
+        "code": {
+          "title": "Error code",
+          "description": "Machine-readable identifier such as invalid_credentials or invalid_refresh_token."
+        },
+        "message": {
+          "title": "Message",
+          "description": "Human-readable explanation. Current API messages are in English."
+        },
+        "errors": {
+          "title": "Validation issues",
+          "description": "Field-level issues when applicable; otherwise an empty array. Original passwords, tokens, input and validation context are not reflected."
+        }
+      }
+    },
+    "ValidationIssue": {
+      "title": "Validation issue",
+      "description": "Location and reason for a rejected request field.",
+      "fields": {
+        "loc": {
+          "title": "Location",
+          "description": "Path to the field, for example [\"body\", \"password\"]. Array indexes may be integers."
+        },
+        "message": {
+          "title": "Explanation",
+          "description": "Description of the violated constraint."
+        },
+        "type": {
+          "title": "Issue type",
+          "description": "Validation category such as missing, string_too_long or invalid_password."
+        }
+      }
+    },
+    "ChangePasswordSchema": {
+      "title": "Password change request",
+      "description": "Current and new passwords for the authenticated user.",
+      "fields": {
+        "current_password": {
+          "title": "Current password",
+          "description": "Current password, 8–256 characters; validated against the current complexity policy."
+        },
+        "new_password": {
+          "title": "New password",
+          "description": "8–256 characters including lowercase, uppercase, a digit and ASCII punctuation."
+        }
+      }
+    },
+    "RequestPasswordResetSchema": {
+      "title": "Reset request",
+      "description": "Requests an email for an active account with a password.",
+      "fields": {
+        "email": {
+          "title": "Email",
+          "description": "Valid email, normalized to lowercase. Account existence is not disclosed."
+        }
+      }
+    },
+    "ConfirmPasswordResetSchema": {
+      "title": "Reset confirmation request",
+      "description": "One-time reset token only. Extra fields are forbidden.",
+      "fields": {
+        "token": {
+          "title": "Reset token",
+          "description": "Secret from the email, 1–512 characters without whitespace. Not a registration token or JWT."
+        }
+      }
+    },
+    "PasswordResetRequestedResponse": {
+      "title": "Reset request accepted",
+      "description": "Does not reveal whether an account exists or an email was queued.",
+      "fields": {
+        "message": {
+          "title": "Message",
+          "description": "Identical message for every valid email address."
+        }
+      }
+    },
+    "PasswordResetResponse": {
+      "title": "Generated password",
+      "description": "Returned after transaction commit. Never cache or log this response.",
+      "fields": {
+        "password": {
+          "title": "Password",
+          "description": "Generated password for the next sign-in. Shown once and never emailed."
+        }
+      }
+    },
+    "UserResponse": {
+      "title": "User profile",
+      "description": "Profile of the current active user. Password hashes and tokens are never returned.",
+      "fields": {
+        "id": {
+          "title": "User ID",
+          "description": "User UUID identified by the verified access JWT."
+        },
+        "username": {
+          "title": "Username",
+          "description": "Normalized username as a string."
+        },
+        "email": {
+          "title": "Email",
+          "description": "Current user email as a string."
+        },
+        "created_at": {
+          "title": "Registration time",
+          "description": "Account creation timestamp with a timezone."
+        }
+      }
+    },
+    "SessionResponse": {
+      "title": "User session",
+      "description": "Metadata of your own session. An active session is not revoked and expires_at is strictly later than the current time.",
+      "fields": {
+        "id": {
+          "title": "Session ID",
+          "description": "UUID used to revoke this session. This is not a refresh token."
+        },
+        "expires_at": {
+          "title": "Expiry time",
+          "description": "Absolute expiry timestamp with a timezone."
+        },
+        "created_at": {
+          "title": "Sign-in time",
+          "description": "Session creation timestamp with a timezone."
+        },
+        "ip_address": {
+          "title": "Sign-in IP",
+          "description": "Connection IP address when the session was created."
+        },
+        "user_agent": {
+          "title": "Sign-in User-Agent",
+          "description": "Original User-Agent or null. This is client-controlled and does not prove device identity."
+        },
+        "last_ip_address": {
+          "title": "Last IP",
+          "description": "IP of the latest successful refresh, or null if no refresh has occurred."
+        },
+        "last_user_agent": {
+          "title": "Last User-Agent",
+          "description": "User-Agent from the latest successful refresh, or null."
+        },
+        "last_used_at": {
+          "title": "Last activity",
+          "description": "Timestamp of the latest successful refresh. Ordinary JWT-authenticated requests do not update this field."
+        }
+      }
+    },
+    "CreateWalletSchema": {
+      "title": "Wallet creation request",
+      "description": "Name and currency. The JWT selects the owner; the server creates the number and accounting records. Extra fields are forbidden.",
+      "fields": {
+        "name": {
+          "title": "Wallet name",
+          "description": "Leading and trailing whitespace is removed; then 1–64 characters are required. Empty or whitespace-only names are forbidden."
+        },
+        "currency": {
+          "title": "Currency",
+          "description": "Wallet currency; defaults to USD. Cannot be changed through this API after creation."
+        }
+      }
+    },
+    "RenameWalletSchema": {
+      "title": "Wallet rename request",
+      "description": "Only a new name is accepted. Owner, currency, status and balance cannot be changed.",
+      "fields": {
+        "name": {
+          "title": "Wallet name",
+          "description": "Leading and trailing whitespace is removed; then 1–64 characters are required. Empty or whitespace-only names are forbidden."
+        }
+      }
+    },
+    "CreateWalletResponse": {
+      "title": "Wallet creation result",
+      "description": "Returned after successful commit. The initial balance is zero.",
+      "fields": {
+        "wallet_id": {
+          "title": "Wallet ID",
+          "description": "Created wallet UUID. This is not the 20-digit wallet number."
+        }
+      }
+    },
+    "CurrencyEnum": {
+      "title": "Currency",
+      "description": "Supported currency codes: USD, EUR, JPY, CHF, GBP, UZS, CAD, RUB.",
+      "fields": {}
+    },
+    "WalletResponse": {
+      "title": "Wallet with balance",
+      "description": "Read model of your own wallet. Balance is read through a JOIN with wallet_balances.",
+      "fields": {
+        "id": {
+          "title": "Wallet ID",
+          "description": "Wallet UUID."
+        },
+        "user_id": {
+          "title": "Owner ID",
+          "description": "Owner UUID matching the user identified by the JWT."
+        },
+        "name": {
+          "title": "Name",
+          "description": "Wallet name as a string."
+        },
+        "balance_minor": {
+          "title": "Balance",
+          "description": "Nonnegative integer in currency minor units, serialized as a decimal string to preserve JavaScript precision. A missing balance record is not replaced with zero."
+        },
+        "number": {
+          "title": "Number",
+          "description": "20 ASCII digits as a string. Leading zeroes are preserved."
+        },
+        "currency": {
+          "title": "Currency",
+          "description": "Currency of the wallet and its balance."
+        },
+        "status": {
+          "title": "Status",
+          "description": "active, frozen or closed. Reading your own closed wallet is allowed."
+        },
+        "created_at": {
+          "title": "Creation time",
+          "description": "Timezone-aware wallet creation timestamp."
+        },
+        "updated_at": {
+          "title": "Update time",
+          "description": "Wallet metadata update time. Changing only the balance does not update this field."
+        }
+      }
+    },
+    "WalletStatusEnum": {
+      "title": "Wallet status",
+      "description": "Valid wallet statuses: active, closed, frozen.",
+      "fields": {}
+    },
+    "WalletSortEnum": {
+      "title": "Wallet sorting",
+      "description": "Supported fields: name, currency, balance, created_at, status. Directions: asc and desc. Format: field:direction.",
+      "fields": {}
+    },
+    "BalanceSummaryResponse": {
+      "title": "Financial schema: BalanceSummaryResponse",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {
+        "totals": {
+          "description": "totals in the financial response or request."
+        },
+        "as_of": {
+          "description": "as_of in the financial response or request."
+        }
+      }
+    },
+    "CreateSandboxTopUpResponse": {
+      "title": "Financial schema: CreateSandboxTopUpResponse",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {
+        "top_up_id": {
+          "description": "top_up_id in the financial response or request."
+        }
+      }
+    },
+    "CreateSandboxTopUpSchema": {
+      "title": "Financial schema: CreateSandboxTopUpSchema",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {
+        "wallet_id": {
+          "description": "wallet_id in the financial response or request."
+        },
+        "amount_minor": {
+          "description": "Decimal minor-unit string preserving full integer precision."
+        },
+        "currency": {
+          "description": "currency in the financial response or request."
+        }
+      }
+    },
+    "CreateTransferResponse": {
+      "title": "Financial schema: CreateTransferResponse",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {
+        "transfer_id": {
+          "description": "transfer_id in the financial response or request."
+        }
+      }
+    },
+    "CreateTransferSchema": {
+      "title": "Financial schema: CreateTransferSchema",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {
+        "sender_wallet_id": {
+          "description": "sender_wallet_id in the financial response or request."
+        },
+        "receiver_wallet_id": {
+          "description": "receiver_wallet_id in the financial response or request."
+        },
+        "amount_minor": {
+          "description": "Decimal minor-unit string preserving full integer precision."
+        },
+        "currency": {
+          "description": "currency in the financial response or request."
+        }
+      }
+    },
+    "CurrencyBalanceResponse": {
+      "title": "Financial schema: CurrencyBalanceResponse",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {
+        "currency": {
+          "description": "currency in the financial response or request."
+        },
+        "posted_minor": {
+          "description": "Decimal minor-unit string preserving full integer precision."
+        },
+        "available_minor": {
+          "description": "Decimal minor-unit string preserving full integer precision."
+        },
+        "spendable_minor": {
+          "description": "Decimal minor-unit string preserving full integer precision."
+        }
+      }
+    },
+    "LedgerTransactionKindEnum": {
+      "title": "Financial schema: LedgerTransactionKindEnum",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {}
+    },
+    "PageResponse_TransactionResponse_": {
+      "title": "Financial schema: PageResponse_TransactionResponse_",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {
+        "items": {
+          "description": "items in the financial response or request."
+        },
+        "next_cursor": {
+          "description": "next_cursor in the financial response or request."
+        }
+      }
+    },
+    "PageResponse_TransferResponse_": {
+      "title": "Financial schema: PageResponse_TransferResponse_",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {
+        "items": {
+          "description": "items in the financial response or request."
+        },
+        "next_cursor": {
+          "description": "next_cursor in the financial response or request."
+        }
+      }
+    },
+    "PageResponse_WalletTransactionResponse_": {
+      "title": "Financial schema: PageResponse_WalletTransactionResponse_",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {
+        "items": {
+          "description": "items in the financial response or request."
+        },
+        "next_cursor": {
+          "description": "next_cursor in the financial response or request."
+        }
+      }
+    },
+    "TransactionDirectionEnum": {
+      "title": "Financial schema: TransactionDirectionEnum",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {}
+    },
+    "TransactionResponse": {
+      "title": "Financial schema: TransactionResponse",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {
+        "id": {
+          "description": "id in the financial response or request."
+        },
+        "source_type": {
+          "description": "source_type in the financial response or request."
+        },
+        "source_id": {
+          "description": "source_id in the financial response or request."
+        },
+        "sender_wallet_id": {
+          "description": "sender_wallet_id in the financial response or request."
+        },
+        "receiver_wallet_id": {
+          "description": "receiver_wallet_id in the financial response or request."
+        },
+        "amount_minor": {
+          "description": "Decimal minor-unit string preserving full integer precision."
+        },
+        "currency": {
+          "description": "currency in the financial response or request."
+        },
+        "direction": {
+          "description": "direction in the financial response or request."
+        },
+        "posted_at": {
+          "description": "posted_at in the financial response or request."
+        }
+      }
+    },
+    "TransferDirectionEnum": {
+      "title": "Financial schema: TransferDirectionEnum",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {}
+    },
+    "TransferRejectionCodeEnum": {
+      "title": "Financial schema: TransferRejectionCodeEnum",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {}
+    },
+    "TransferResponse": {
+      "title": "Financial schema: TransferResponse",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {
+        "id": {
+          "description": "id in the financial response or request."
+        },
+        "sender_wallet_id": {
+          "description": "sender_wallet_id in the financial response or request."
+        },
+        "receiver_wallet_id": {
+          "description": "receiver_wallet_id in the financial response or request."
+        },
+        "amount_minor": {
+          "description": "Decimal minor-unit string preserving full integer precision."
+        },
+        "currency": {
+          "description": "currency in the financial response or request."
+        },
+        "status": {
+          "description": "status in the financial response or request."
+        },
+        "direction": {
+          "description": "direction in the financial response or request."
+        },
+        "created_at": {
+          "description": "created_at in the financial response or request."
+        },
+        "completed_at": {
+          "description": "completed_at in the financial response or request."
+        },
+        "rejection_code": {
+          "description": "rejection_code in the financial response or request."
+        }
+      }
+    },
+    "TransferStatusEnum": {
+      "title": "Financial schema: TransferStatusEnum",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {}
+    },
+    "WalletBalanceResponse": {
+      "title": "Financial schema: WalletBalanceResponse",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {
+        "currency": {
+          "description": "currency in the financial response or request."
+        },
+        "posted_minor": {
+          "description": "Decimal minor-unit string preserving full integer precision."
+        },
+        "available_minor": {
+          "description": "Decimal minor-unit string preserving full integer precision."
+        },
+        "spendable_minor": {
+          "description": "Decimal minor-unit string preserving full integer precision."
+        },
+        "wallet_id": {
+          "description": "wallet_id in the financial response or request."
+        },
+        "version": {
+          "description": "version in the financial response or request."
+        },
+        "updated_at": {
+          "description": "updated_at in the financial response or request."
+        },
+        "as_of": {
+          "description": "as_of in the financial response or request."
+        }
+      }
+    },
+    "WalletTransactionResponse": {
+      "title": "Financial schema: WalletTransactionResponse",
+      "description": "Financial operation, history, filter or balance contract.",
+      "fields": {
+        "id": {
+          "description": "id in the financial response or request."
+        },
+        "source_type": {
+          "description": "source_type in the financial response or request."
+        },
+        "source_id": {
+          "description": "source_id in the financial response or request."
+        },
+        "sender_wallet_id": {
+          "description": "sender_wallet_id in the financial response or request."
+        },
+        "receiver_wallet_id": {
+          "description": "receiver_wallet_id in the financial response or request."
+        },
+        "amount_minor": {
+          "description": "Decimal minor-unit string preserving full integer precision."
+        },
+        "currency": {
+          "description": "currency in the financial response or request."
+        },
+        "direction": {
+          "description": "direction in the financial response or request."
+        },
+        "posted_at": {
+          "description": "posted_at in the financial response or request."
+        },
+        "wallet_id": {
+          "description": "wallet_id in the financial response or request."
+        },
+        "counterparty_wallet_id": {
+          "description": "counterparty_wallet_id in the financial response or request."
+        }
+      }
+    },
+    "HealthResponse": {
+      "title": "Process health",
+      "description": "Application process liveness response.",
+      "fields": {
+        "status": {
+          "description": "The process is running."
+        }
+      }
+    },
+    "DependencyChecks": {
+      "title": "Dependency probes",
+      "description": "Critical dependency probe results without addresses or secrets.",
+      "fields": {
+        "postgres": {
+          "description": "PostgreSQL SELECT 1 result."
+        },
+        "redis": {
+          "description": "Redis PING result."
+        }
+      }
+    },
+    "ReadinessResponse": {
+      "title": "API readiness",
+      "description": "API readiness for operations using PostgreSQL and Redis.",
+      "fields": {
+        "status": {
+          "description": "ok only when every dependency probe succeeds."
+        },
+        "checks": {
+          "description": "Individual dependency probe results."
+        }
+      }
+    },
+    "ResolveWalletRecipientSchema": {
+      "title": "Recipient lookup",
+      "description": "Exact lookup by full wallet number, preserving leading zeroes.",
+      "fields": {
+        "wallet_number": {
+          "title": "Wallet number",
+          "description": "A string of 20 ASCII digits, including leading zeroes."
+        }
+      }
+    },
+    "WalletRecipientResponse": {
+      "title": "Transfer recipient",
+      "description": "Minimal public details of an active wallet and its active owner.",
+      "fields": {
+        "wallet_id": {
+          "title": "Wallet ID",
+          "description": "Internal wallet UUID used to create the transfer."
+        },
+        "number": {
+          "title": "Number",
+          "description": "Full wallet number as a 20-digit string."
+        },
+        "currency": {
+          "title": "Currency",
+          "description": "Recipient wallet currency."
+        },
+        "owner": {
+          "title": "Recipient username",
+          "description": "Username of the found wallet owner, not the sender."
+        }
+      }
+    },
+    "ResendRegistrationConfirmationSchema": {
+      "title": "Resend registration confirmation",
+      "description": "Email-only public request. Extra fields are forbidden.",
+      "fields": {
+        "email": {
+          "description": "Registration email, normalized to lowercase."
+        }
+      }
+    },
+    "RegistrationConfirmationRequestedResponse": {
+      "title": "Confirmation request accepted",
+      "description": "Generic acknowledgement without revealing account existence or status.",
+      "fields": {
+        "message": {
+          "description": "The same message for pending, active, inactive and unknown accounts."
+        }
+      }
+    }
+  }
+}

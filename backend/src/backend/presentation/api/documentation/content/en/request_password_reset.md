@@ -1,0 +1,5 @@
+Send an `email` in JSON. Every valid email gets the same `202` and message, without confirming whether the account exists. For an active user with a password, a challenge and outbox task are saved in one transaction. The worker sends a link to `FRONTEND_PASSWORD_RESET_URL#token=...`; `202` does not guarantee delivery. Password and sessions stay unchanged until confirmation. Default link lifetime is 15 minutes (`PASSWORD_RESET_TTL`).
+
+Limits are shared across API processes: 10 requests per minute per IP and 3 per 15 minutes per email, including unknown addresses. Exceeding a budget returns `429` with `Retry-After`. Resolve client IP only through a trusted proxy, not arbitrary X-Forwarded-For. Successful responses wait until at least 500–600 ms after use-case execution began to reduce timing differences; this is not a constant-time guarantee. Responses must not be cached.
+
+Limits use a shared Redis instance. If it is unavailable, the API returns `503 rate_limiter_unavailable` without performing the operation.

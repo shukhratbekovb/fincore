@@ -1,0 +1,5 @@
+Resolve a transfer recipient using a complete wallet number. A Bearer access token and an active requesting account are required. The body accepts wallet_number as exactly 20 ASCII digits; leading zeroes are preserved and partial searches are not supported.
+
+The response contains only wallet_id, number, currency and owner. The owner field is the username of the found wallet owner, i.e. the recipient, not the sender. Only active wallets of active owners are eligible, including the requesting user's own wallets. Missing, closed and frozen wallets all return the same 404 wallet_not_found.
+
+This read-only query uses PostgreSQL without row locks or commits. Lookup does not reserve a recipient or authorize a transfer. CreateTransferUseCase checks currencies, wallet states, sender ownership and balances again. The frontend uses the returned wallet_id for the existing transfer request. All responses use Cache-Control: no-store. Redis applies per-user and per-IP budgets of 30 and 100 per minute by default; unavailable limiting fails closed with 503. The number is sent in the body, outside URLs and request metadata logs.

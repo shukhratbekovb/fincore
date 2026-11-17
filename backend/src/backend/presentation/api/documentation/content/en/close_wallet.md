@@ -1,0 +1,3 @@
+Requires an active account and a Bearer access JWT. Supply a wallet_id UUID in the path; no JSON body is required. The JWT identifies the owner. Foreign and absent wallets both return `404 wallet_not_found`. Wallet, balance and ledger account are locked in that order inside one transaction.
+
+Closing requires zero posted_minor. A nonzero balance returns `409 wallet_balance_not_zero` without changing state. A missing balance or inconsistent liability account returns a controlled `500 wallet_accounting_state_error` without internal details. Success sets wallet and account status to closed while preserving balance and history. Repeating closure of a consistent wallet with zero balance also succeeds. The response is `204` without a body and uses `Cache-Control: no-store`.

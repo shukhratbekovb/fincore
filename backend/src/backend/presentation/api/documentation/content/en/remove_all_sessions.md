@@ -1,0 +1,3 @@
+Send a Bearer access JWT. The server gets the owner from the JWT, locks the user row and revokes all of that user's unrevoked sessions in one transaction. Previous revocation timestamps are preserved. No sessions is also a successful result. The response is `204` without a body, including no JSON null.
+
+This includes the session from which the user initiated the action. Existing refresh tokens can no longer renew access; sign in to create a new session. Previously issued access JWTs remain valid until expiry because protected requests do not yet check session state. Sign-ins after the operation create new sessions. The response uses `Cache-Control: no-store`.

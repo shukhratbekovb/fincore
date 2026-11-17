@@ -1,0 +1,3 @@
+Requires an active account and a Bearer access JWT. Supply a wallet_id UUID in the path and only name in JSON. The verified JWT identifies the owner. Foreign and absent wallets both return `404 wallet_not_found`; foreign records are unchanged. An invalid UUID or request body returns `422`.
+
+Name normalization and validation match creation. The wallet is locked before checking ownership and changing its name. Both active and frozen wallets can be renamed, while closed wallets return `409 wallet_closed`. Currency, number and balance do not change. Success returns `204` without a body, including no JSON null. The response uses `Cache-Control: no-store`.

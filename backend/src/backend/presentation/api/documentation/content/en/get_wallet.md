@@ -1,0 +1,3 @@
+Send a Bearer access JWT and a wallet_id UUID in the path. The user must exist and be active. The SQL query restricts both wallet_id and the JWT user_id, so another user's records never enter DTO mapping. Foreign and absent wallets return the same `404 wallet_not_found`. Invalid UUIDs return `422`.
+
+Success returns `200` with metadata and balance_minor, an integer in currency minor units. The wallet number is a 20-digit string preserving leading zeroes. Balance is read with a LEFT JOIN: a missing balance for your own wallet returns controlled `500 wallet_accounting_state_error`. Zero balances are valid. Your active, frozen and closed wallets can all be read. The request does not commit or use FOR UPDATE. The response uses `Cache-Control: no-store`.

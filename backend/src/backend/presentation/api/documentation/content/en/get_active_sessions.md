@@ -1,0 +1,3 @@
+Requires `Authorization: Bearer <access_token>`. The owner UUID comes from the verified JWT, followed by a check that the user exists and is active. A successful `200` contains an array of your own sessions. No active sessions returns `[]`, rather than `404`.
+
+Only sessions with revoked_at = null and expires_at > now are selected; equality already means expired. Results are ordered by created_at DESC, id DESC. The response shows original IP/User-Agent and the latest successful refresh metadata. last_used_at does not track every HTTP request. User-Agent is client-controlled and does not guarantee a device model. Session secrets and refresh tokens are excluded. Responses use `Cache-Control: no-store`.

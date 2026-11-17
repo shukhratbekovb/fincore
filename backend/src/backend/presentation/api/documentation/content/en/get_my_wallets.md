@@ -1,0 +1,5 @@
+Requires a Bearer access JWT and an active user. GET accepts no JSON body. Success returns `200` with an array of your own wallets and their balances. No wallets or no filter matches returns `[]`. user_id always comes from the JWT and cannot be changed through query parameters.
+
+Optional query parameters are currency, status and sort_by. Example: `/v1/wallets?currency=CAD&status=active&sort_by=balance:desc`. Omitting status includes all statuses, including closed. Sorting defaults to created_at:asc, with id ASC as the tie-breaker. Sort fields: name, currency, balance, created_at, status; directions asc/desc. Balance sorting compares minor-unit values without currency conversion. Invalid enum values return `422`.
+
+Wallets and balances are read in one combined SQL query without N+1, row locks or commit. A missing balance for your own wallet returns `500 wallet_accounting_state_error` rather than zero or an omitted record. The entire filtered list is returned; pagination is not yet available. The response uses `Cache-Control: no-store`.

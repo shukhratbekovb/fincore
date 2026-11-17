@@ -1,0 +1,3 @@
+Send a Bearer access JWT and a session_id UUID in the path. The user_id comes from the verified JWT. Ownership is checked after locking the user and session. Both absent sessions and sessions belonging to another user return the same `404 session_not_found`; another user's session remains unchanged. Invalid UUIDs return `422`.
+
+A successful revocation returns `204` without a body. Repeating revocation for your own session also returns `204`, preserving the original timestamp without another write. Time is read after acquiring locks. Refresh stops working for this session, while other sessions are unaffected. Previously issued access JWTs remain valid until expiry. Responses use `Cache-Control: no-store`.

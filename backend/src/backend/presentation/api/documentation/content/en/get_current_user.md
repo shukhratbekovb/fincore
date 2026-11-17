@@ -1,0 +1,3 @@
+Send `Authorization: Bearer <access_token>`. The server validates JWT signature, issuer, audience, purpose and expiry, then loads the user identified by sub. No user_id in a URL, query or JSON is needed; those values do not select a different user. An inactive account receives `403`, while a missing user receives `404`.
+
+Success returns `200` with id, username, email and created_at. Username and email are strings. Password hashes and tokens are excluded. Timestamps include a timezone. The response uses `Cache-Control: no-store`. Current authentication validates the JWT and user status; session revocation does not yet invalidate an already issued access JWT before expiry.
