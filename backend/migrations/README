@@ -1,1 +1,52 @@
-Generic single-database configuration.
+# Миграции / Migrations
+
+[Русский](#ru) | [English](#en)
+
+<a id="ru"></a>
+
+## Русский
+
+Миграции схемы PostgreSQL управляются Alembic. Запускайте команды из `backend`
+после настройки `DATABASE_URL` в окружении или `backend/.env`:
+
+```bash
+poetry run alembic current
+poetry run alembic upgrade head
+```
+
+`env.py` получает URL через Settings и использует asyncpg; версии находятся
+в `versions/`. Приложение не применяет миграции автоматически. В корневом
+production Compose отдельный migration job завершается перед запуском сервисов.
+
+Проверяйте upgrade/downgrade и соответствие ORM-моделям в отдельной тестовой БД
+с суффиксом `_test`, не в рабочей. Подробности:
+[тесты PostgreSQL](../tests/integration/persistence/README.md).
+
+Downgrade может удалять данные и иметь дополнительные ограничения. В частности,
+`20261115_06` нельзя откатить после появления постоянных `idempotency_receipts`.
+Перед откатом изучите конкретную миграцию и [политику обслуживания](../../docs/maintenance.md).
+
+<a id="en"></a>
+
+## English
+
+Alembic manages PostgreSQL schema migrations. Run commands from `backend` after
+configuring `DATABASE_URL` through the environment or `backend/.env`:
+
+```bash
+poetry run alembic current
+poetry run alembic upgrade head
+```
+
+`env.py` reads the URL through Settings and uses asyncpg; revision files live in
+`versions/`. The application does not apply migrations automatically. In root
+production Compose, a separate migration job finishes before application services start.
+
+Verify upgrade/downgrade and ORM model consistency in a separate database whose
+name ends in `_test`, never the working database. See
+[PostgreSQL tests](../tests/integration/persistence/README.md).
+
+Downgrade may remove data and have additional restrictions. In particular,
+`20261115_06` cannot be downgraded after permanent `idempotency_receipts` exist.
+Review the specific revision and [maintenance policy](../../docs/maintenance.md)
+before rolling back.
